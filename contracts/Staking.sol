@@ -1,180 +1,159 @@
-/**
- *Submitted for verification at Etherscan.io on 2021-01-09
- */
-
 //SPDX-License-Identifier: UNLICENSED
 
-pragma solidity ^0.7.0;
+pragma solidity ^0.7.3;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/GSN/Context.sol";
 
-contract Staking is Ownable {
+import "./interfaces/IGLY.sol";
+
+contract Staking is Context {
     using SafeMath for uint256;
 
     struct StakingInfo {
         uint256 amount;
-        uint256 depositDate;
+        uint256 lastUpdateTime;
+        uint256 rewardRate;
     }
-    //allowed token addresses
-    mapping(address => bool) public allowedTokens;
 
-    IERC20 stakingToken;
-    uint256 REWARD_DIVIDER = 10**18;
+    IGLY stakingToken;
 
-    uint256 ownerTokensAmount;
-    address[] internal stakeholders;
+    uint256[] rewardRates = [75, 75, 75, 50, 50, 50, 35, 35, 35, 20, 20, 20, 7];
+
+    uint256 _totalStakes;
     mapping(address => StakingInfo[]) internal stakes;
 
-    constructor(IERC20 _stakingToken) {
+    constructor(IGLY _stakingToken) {
         stakingToken = _stakingToken;
     }
 
     event Staked(address staker, uint256 amount);
     event Unstaked(address staker, uint256 amount);
-
-    modifier isValidToken(address _tokenAddr) {
-        require(allowedTokens[_tokenAddr]);
-        _;
-    }
-
-    function addToken(address _tokenAddr) external onlyOwner {
-        allowedTokens[_tokenAddr] = true;
-    }
+    event ClaimedReward(address staker, uint256 amount);
 
     function totalStakes() public view returns (uint256) {
-        uint256 _totalStakes = 0;
-        for (uint256 i = 0; i < stakeholders.length; i += 1) {
-            for (uint256 j = 0; j < stakes[stakeholders[i]].length; j += 1)
-                _totalStakes = _totalStakes.add(
-                    stakes[stakeholders[i]][j].amount
-                );
-        }
         return _totalStakes;
     }
 
-    function isStakeholder(address _address)
-        public
-        view
-        returns (bool, uint256)
-    {
-        for (uint256 s = 0; s < stakeholders.length; s += 1) {
-            if (_address == stakeholders[s]) return (true, s);
-        }
-        return (false, 0);
+    function isStakeHolder(address _address) public view returns (bool) {
+        return stakes[_address].length > 0;
     }
 
-    function addStakeholder(address _stakeholder) public {
-        (bool _isStakeholder, ) = isStakeholder(_stakeholder);
-        if (!_isStakeholder) stakeholders.push(_stakeholder);
-    }
-
-    function removeStakeholder(address _stakeholder) internal {
-        (bool _isStakeholder, uint256 s) = isStakeholder(_stakeholder);
-        if (_isStakeholder) {
-            stakeholders[s] = stakeholders[stakeholders.length - 1];
-            stakeholders.pop();
+    function totalStakeOf(address _stakeHolder) public view returns (uint256) {
+        uint256 _total = 0;
+        for (uint256 j = 0; j < stakes[_stakeHolder].length; j += 1) {
+            uint256 amount = stakes[_stakeHolder][j].amount;
+            _total = _total.add(amount);
         }
+
+        return _total;
     }
 
     function stake(uint256 _amount) public {
-        uint256 depositFee = (1 * _amount) / 100;
-        uint256 leftAmount = _amount - depositFee;
-
         require(
-            stakingToken.transferFrom(msg.sender, address(this), leftAmount),
+            stakingToken.transferFrom(_msgSender(), address(this), _amount),
             "Stake required!"
         );
-        if (stakes[msg.sender].length == 0) {
-            addStakeholder(msg.sender);
-        }
-        uint256 depositTime = block.timestamp;
-        stakes[msg.sender].push(StakingInfo(leftAmount, depositTime));
-        emit Staked(msg.sender, leftAmount);
+
+        uint256 lastUpdateTime = block.timestamp;
+        stakes[_msgSender()].push(
+            StakingInfo(_amount, lastUpdateTime - 120 days, 0)
+        );
+        _totalStakes = _totalStakes.add(_amount);
+        emit Staked(_msgSender(), _amount);
     }
 
     function unstake() public {
         uint256 withdrawAmount = 0;
-        for (uint256 j = 0; j < stakes[msg.sender].length; j += 1) {
-            uint256 amount = stakes[msg.sender][j].amount;
-            withdrawAmount = withdrawAmount.add(amount);
-            uint256 unstakeTime = block.timestamp;
-            uint256 rewardAmount =
-                calculateReward(
-                    stakes[msg.sender][j].depositDate,
-                    unstakeTime,
-                    amount
-                );
-            rewardAmount = rewardAmount.div(REWARD_DIVIDER);
-            withdrawAmount = withdrawAmount.add(rewardAmount.div(100));
-        }
+        uint256 _staked = totalStakeOf(_msgSender());
+        uint256 _reward = rewardOf(_msgSender());
 
-        require(
-            stakingToken.transfer(msg.sender, withdrawAmount),
-            "Not enough tokens in contract!"
-        );
-        delete stakes[msg.sender];
-        removeStakeholder(msg.sender);
-        emit Unstaked(msg.sender, withdrawAmount);
+        stakingToken.transfer(_msgSender(), _staked);
+        stakingToken.mint(_msgSender(), _reward);
+        _totalStakes = _totalStakes.sub(_staked);
+        delete stakes[_msgSender()];
+        emit Unstaked(_msgSender(), withdrawAmount);
     }
 
     function calculateReward(
-        uint256 _depositdate,
-        uint256 _unstakeTime,
+        uint256 _lastUpdateTime,
+        uint256 _rewardRate,
         uint256 _amount
-    ) internal pure returns (uint256) {
-        uint256 _rewardAmount;
-        if (
-            _unstakeTime >= _depositdate &&
-            _unstakeTime < _depositdate + 90 days
-        ) {
-            _rewardAmount = (_amount * 75) / 100;
-        }
-        if (
-            _unstakeTime >= _depositdate + 90 days &&
-            _unstakeTime < _depositdate + 270 days
-        ) {
-            _rewardAmount = (_amount * 50) / 100;
-        }
-        if (
-            _unstakeTime >= _depositdate + 270 days &&
-            _unstakeTime < _depositdate + 450 days
-        ) {
-            _rewardAmount = (_amount * 35) / 100;
-        }
-        if (
-            _unstakeTime >= _depositdate + 450 days &&
-            _unstakeTime <= _depositdate + 630 days
-        ) {
-            _rewardAmount = (_amount * 20) / 100;
-        }
-        if (_unstakeTime > _depositdate + 270 days) {
-            _rewardAmount = (_amount * 7) / 100;
+    ) internal view returns (uint256) {
+        uint256 rewardAmount;
+        uint256 currentTime = block.timestamp;
+        uint256 updateTime = _lastUpdateTime;
+        uint256 rate = _rewardRate;
+
+        while (updateTime + 30 days <= currentTime) {
+            rewardAmount = rewardAmount.add(
+                _amount.mul(rewardRates[rate]).div(100).div(12)
+            );
+            updateTime = updateTime + 30 days;
+            if (rate < 12) rate = rate.add(1);
         }
 
-        return _rewardAmount;
+        return rewardAmount;
     }
 
-    function sendTokens(uint256 _amount) public onlyOwner {
-        require(
-            stakingToken.transferFrom(msg.sender, address(this), _amount),
-            "Transfering not approved!"
-        );
-        ownerTokensAmount = ownerTokensAmount.add(_amount);
+    /**
+     * @notice A method to allow a stakeholder to check his rewards.
+     * @param _stakeholder The stakeholder to check rewards for.
+     */
+    function rewardOf(address _stakeholder) public view returns (uint256) {
+        uint256 rewardAmount = 0;
+        for (uint256 j = 0; j < stakes[_stakeholder].length; j += 1) {
+            uint256 amount = stakes[_stakeholder][j].amount;
+            uint256 rate = stakes[_stakeholder][j].rewardRate;
+            uint256 reward =
+                calculateReward(
+                    stakes[_stakeholder][j].lastUpdateTime,
+                    rate,
+                    amount
+                );
+            rewardAmount = rewardAmount.add(reward);
+        }
+        return rewardAmount;
     }
 
-    function withdrawTokens(address receiver, uint256 _amount)
-        public
-        onlyOwner
-    {
-        uint256 withdrawFee = (1 * _amount) / 100;
-        uint256 leftWithdrawAmount = _amount - withdrawFee;
+    /**
+     * @notice A method to check if the holder can claim rewards
+     */
+    function isClaimable() public view returns (bool, uint256) {
+        uint256 reward = rewardOf(_msgSender());
 
-        ownerTokensAmount = ownerTokensAmount.sub(leftWithdrawAmount);
-        require(
-            stakingToken.transfer(receiver, leftWithdrawAmount),
-            "Not enough tokens on contract!"
-        );
+        return (reward > 0, 0);
+    }
+
+    /**
+     * @notice A method to allow a stakeholder to withdraw his rewards.
+     */
+    function claimReward() public {
+        address stakeholder = _msgSender();
+
+        uint256 rewardAmount = rewardOf(stakeholder);
+
+        require(rewardAmount > 0, "Reward is empty!");
+
+        stakingToken.mint(_msgSender(), rewardAmount);
+
+        for (uint256 j = 0; j < stakes[stakeholder].length; j += 1) {
+            uint256 updateTime =
+                stakes[stakeholder][j].lastUpdateTime + 30 days;
+            uint256 currentTime = block.timestamp;
+
+            while (updateTime <= currentTime) {
+                stakes[stakeholder][j].lastUpdateTime = updateTime;
+
+                if (stakes[stakeholder][j].rewardRate < 12)
+                    stakes[stakeholder][j].rewardRate = stakes[stakeholder][j]
+                        .rewardRate
+                        .add(1);
+
+                updateTime = updateTime + 30 days;
+            }
+        }
+
+        emit ClaimedReward(_msgSender(), rewardAmount);
     }
 }

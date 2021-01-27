@@ -8,7 +8,7 @@ const { expect } = require('chai');
 // `describe` receives the name of a section of your test suite, and a callback.
 // The callback must define the tests of that section. This callback can't be
 // an async function.
-describe('Token contract', function () {
+describe('GLY', function () {
   // Mocha has four functions that let you hook into the the test runner's
   // lifecyle. These are: `before`, `beforeEach`, `after`, `afterEach`.
 
@@ -42,16 +42,6 @@ describe('Token contract', function () {
   describe('Deployment', function () {
     // `it` is another Mocha function. This is the one you use to define your
     // tests. It receives the test name, and a callback function.
-
-    // If the callback function is async, Mocha will `await` it.
-    it('Should set the right owner', async function () {
-      // Expect receives a value, and wraps it in an Assertion object. These
-      // objects have a lot of utility methods to assert values.
-
-      // This test expects the owner variable stored in the contract to be equal
-      // to our Signer's owner.
-      expect(await glyphToken.owner()).to.equal(owner.address);
-    });
 
     it('Should assign the total supply of tokens to the owner', async function () {
       const ownerBalance = await glyphToken.balanceOf(owner.address);
@@ -100,10 +90,10 @@ describe('Token contract', function () {
       expect(finalOwnerBalance).to.equal(initialOwnerBalance.sub(150));
 
       const addr1Balance = await glyphToken.balanceOf(addr1.address);
-      expect(addr1Balance).to.equal(hre.ethers.BigNumber.from(100));
+      expect(addr1Balance).to.equal(ethers.BigNumber.from(100));
 
       const addr2Balance = await glyphToken.balanceOf(addr2.address);
-      expect(addr2Balance).to.equal(hre.ethers.BigNumber.from(50));
+      expect(addr2Balance).to.equal(ethers.BigNumber.from(50));
     });
   });
 });

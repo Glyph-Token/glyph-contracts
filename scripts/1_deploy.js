@@ -25,8 +25,9 @@ async function main() {
   staking = await Staking.deploy(glyph.address);
 
   await staking.deployed();
-
   console.log('Staking deployed to:', staking.address);
+
+  await glyph.addMinterRole(staking.address);
 }
 
 // We recommend this pattern to be able to use async/await everywhere
