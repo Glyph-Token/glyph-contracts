@@ -56,9 +56,7 @@ contract Staking is Context {
         );
 
         uint256 lastUpdateTime = block.timestamp;
-        stakes[_msgSender()].push(
-            StakingInfo(_amount, lastUpdateTime - 120 days, 0)
-        );
+        stakes[_msgSender()].push(StakingInfo(_amount, lastUpdateTime, 0));
         _totalStakes = _totalStakes.add(_amount);
         emit Staked(_msgSender(), _amount);
     }
