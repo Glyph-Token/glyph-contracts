@@ -6,7 +6,11 @@ import "@openzeppelin/contracts/token/ERC20/ERC20Burnable.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/GSN/Context.sol";
 
+import "@openzeppelin/contracts/math/SafeMath.sol";
+
 contract GLY is ERC20Burnable, AccessControl {
+    using SafeMath for uint256;
+
     uint256 public INITIAL_SUPPLY = 1000000000 * 10**18;
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 
@@ -37,6 +41,7 @@ contract GLY is ERC20Burnable, AccessControl {
      * @param _amount The amount of tokens to mint
      */
     function mint(address _to, uint256 _amount) external {
+        require(totalSupply().add(_amount) <= INITIAL_SUPPLY, "Exceed Limit");
         require(hasRole(MINTER_ROLE, _msgSender()), "Caller is not a minter");
         _mint(_to, _amount);
     }

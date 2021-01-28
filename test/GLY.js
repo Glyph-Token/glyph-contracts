@@ -36,6 +36,7 @@ describe('GLY', function () {
     // for it to be deployed(), which happens onces its transaction has been
     // mined.
     glyphToken = await GLY.deploy();
+    await glyphToken.addMinterRole(owner.address);
   });
 
   // You can nest describe calls to create subsections.
@@ -46,6 +47,18 @@ describe('GLY', function () {
     it('Should assign the total supply of tokens to the owner', async function () {
       const ownerBalance = await glyphToken.balanceOf(owner.address);
       expect(await glyphToken.totalSupply()).to.equal(ownerBalance);
+    });
+  });
+
+  describe('Mint', function () {
+    // `it` is another Mocha function. This is the one you use to define your
+    // tests. It receives the test name, and a callback function.
+
+    it('Should mint token', async function () {
+      const mintAmount = ethers.BigNumber.from(10).pow(18).mul(300);
+      await glyphToken.burn(mintAmount);
+      await glyphToken.mint(addr1.address, mintAmount);
+      expect(await glyphToken.balanceOf(addr1.address)).to.equal(mintAmount);
     });
   });
 
