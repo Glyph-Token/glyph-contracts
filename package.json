@@ -12,7 +12,8 @@
   "dependencies": {
     "@openzeppelin/contracts": "^3.3.0",
     "dotenv": "^8.2.0",
-    "hardhat": "^2.0.8"
+    "hardhat": "^2.0.8",
+    "moment": "^2.29.1"
   },
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.0",

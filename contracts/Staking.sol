@@ -19,12 +19,14 @@ contract Staking is Context {
     IGLY stakingToken;
 
     uint256[] rewardRates = [75, 75, 75, 50, 50, 50, 35, 35, 35, 20, 20, 20, 7];
+    uint256 public stakingStart;
 
     uint256 _totalStakes;
     mapping(address => StakingInfo[]) internal stakes;
 
-    constructor(IGLY _stakingToken) {
+    constructor(IGLY _stakingToken, uint256 _stakingStart) {
         stakingToken = _stakingToken;
+        stakingStart = _stakingStart;
     }
 
     event Staked(address staker, uint256 amount);
@@ -49,14 +51,27 @@ contract Staking is Context {
         return _total;
     }
 
+    function getRewardRate(uint256 _updateTime)
+        public
+        view
+        returns (uint256 _rewardRate)
+    {
+        _rewardRate = _updateTime.sub(stakingStart).div(30 days);
+        if (_rewardRate > 13) _rewardRate = 12;
+    }
+
     function stake(uint256 _amount) public {
+        require(stakingStart <= block.timestamp, "Staking is not started");
         require(
             stakingToken.transferFrom(_msgSender(), address(this), _amount),
             "Stake required!"
         );
 
         uint256 lastUpdateTime = block.timestamp;
-        stakes[_msgSender()].push(StakingInfo(_amount, lastUpdateTime, 0));
+
+        stakes[_msgSender()].push(
+            StakingInfo(_amount, lastUpdateTime, getRewardRate(lastUpdateTime))
+        );
         _totalStakes = _totalStakes.add(_amount);
         emit Staked(_msgSender(), _amount);
     }
@@ -83,9 +98,27 @@ contract Staking is Context {
         uint256 updateTime = _lastUpdateTime;
         uint256 rate = _rewardRate;
 
+        uint256 mod =
+            updateTime.sub(stakingStart).mod(30 days).div(1 days).mul(1 days);
+
+        if (updateTime + 30 days - mod <= currentTime) {
+            rewardAmount = rewardAmount.add(
+                _amount
+                    .mul(rewardRates[rate])
+                    .mul(30 days - mod)
+                    .div(365 days)
+                    .div(100)
+            );
+
+            updateTime = updateTime + 30 days - mod;
+            if (rate < 12) rate = rate.add(1);
+        }
+
         while (updateTime + 30 days <= currentTime) {
             rewardAmount = rewardAmount.add(
-                _amount.mul(rewardRates[rate]).div(100).div(12)
+                _amount.mul(rewardRates[rate]).mul(30 days).div(365 days).div(
+                    100
+                )
             );
             updateTime = updateTime + 30 days;
             if (rate < 12) rate = rate.add(1);
@@ -136,20 +169,14 @@ contract Staking is Context {
         stakingToken.mint(_msgSender(), rewardAmount);
 
         for (uint256 j = 0; j < stakes[stakeholder].length; j += 1) {
-            uint256 updateTime =
-                stakes[stakeholder][j].lastUpdateTime + 30 days;
             uint256 currentTime = block.timestamp;
-
-            while (updateTime <= currentTime) {
-                stakes[stakeholder][j].lastUpdateTime = updateTime;
-
-                if (stakes[stakeholder][j].rewardRate < 12)
-                    stakes[stakeholder][j].rewardRate = stakes[stakeholder][j]
-                        .rewardRate
-                        .add(1);
-
-                updateTime = updateTime + 30 days;
-            }
+            uint256 _lastUpdateTime =
+                currentTime -
+                    currentTime.sub(stakingStart).mod(30 days).div(1 days).mul(
+                        1 days
+                    );
+            stakes[stakeholder][j].lastUpdateTime = _lastUpdateTime;
+            stakes[stakeholder][j].rewardRate = getRewardRate(_lastUpdateTime);
         }
 
         emit ClaimedReward(_msgSender(), rewardAmount);
