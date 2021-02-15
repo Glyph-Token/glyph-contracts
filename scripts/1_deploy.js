@@ -4,6 +4,7 @@
 // When running the script with `hardhat run <script>` you'll find the Hardhat
 // Runtime Environment's members available in the global scope.
 const hre = require('hardhat');
+const moment = require('moment');
 
 async function main() {
   // Hardhat always runs the compile task when running scripts with its command
@@ -21,8 +22,9 @@ async function main() {
 
   console.log('Glyph deployed to:', glyph.address);
 
+  const startTime = moment().subtract(132, 'days').unix();
   const Staking = await hre.ethers.getContractFactory('Staking');
-  staking = await Staking.deploy(glyph.address);
+  staking = await Staking.deploy(glyph.address, startTime);
 
   await staking.deployed();
   console.log('Staking deployed to:', staking.address);
