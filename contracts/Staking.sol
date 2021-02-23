@@ -33,6 +33,10 @@ contract Staking is Context {
     event Unstaked(address staker, uint256 amount);
     event ClaimedReward(address staker, uint256 amount);
 
+    function getStakingStart() public view returns (uint256) {
+        return stakingStart;
+    }
+
     function totalStakes() public view returns (uint256) {
         return _totalStakes;
     }
